@@ -30,13 +30,13 @@ const STATUS_COLORS = {
     WARNING: '#f97316'  // 진한 주황 (수정 후 미배포 강조)
 };
 
-const DeployManagerDialog = ({ 
-    open, 
-    onClose, 
-    interfaceId, 
-    interfaceName, 
+const DeployManagerDialog = ({
+    open,
+    onClose,
+    interfaceId,
+    interfaceName,
     lastModifiedTime, // 부모로부터 받은 인터페이스 수정 시간
-    onRefresh 
+    onRefresh
 }) => {
     // --- 1. States ---
     const [tabValue, setTabValue] = useState(0);
@@ -55,7 +55,7 @@ const DeployManagerDialog = ({
         try {
             const res = await interfaceApi.fetchAdaptorStatusWithMapping(interfaceId);
             const data = res.data || [];
-            
+
             // 배포 시간 순 정렬
             data.sort((a, b) => {
                 if (a.lastDeployTime && !b.lastDeployTime) return -1;
@@ -69,7 +69,7 @@ const DeployManagerDialog = ({
                 .filter(item => item.isMapped === 'Y' && String(item.finalMoStatus) === '1')
                 .map(item => item.pdName);
             setSelectedAdapters(mappedIds);
-        } catch (err) { console.error("데이터 로드 실패:", err); } 
+        } catch (err) { console.error("데이터 로드 실패:", err); }
         finally { setLoading(false); }
     }, [interfaceId]);
 
@@ -85,7 +85,7 @@ const DeployManagerDialog = ({
                 status: row.resultCode // 'S', 'P', 'F'
             }));
             setHistory(formattedData);
-        } catch (err) { console.error("이력 로드 실패:", err); } 
+        } catch (err) { console.error("이력 로드 실패:", err); }
         finally { setLoading(false); }
     };
 
@@ -145,22 +145,22 @@ const DeployManagerDialog = ({
         const isDisable = String(adpt.finalMoStatus) !== '1';
         const isSelected = selectedAdapters.includes(adpt.pdName);
         const ui = getStatusUI(adpt.finalMoStatus);
-        
+
         // 최종 수정 시간과 비교하여 경고 표시
-        const isOutdated = adpt.lastDeployTime && lastModifiedTime 
+        const isOutdated = adpt.lastDeployTime && lastModifiedTime
             ? new Date(adpt.lastDeployTime) < new Date(lastModifiedTime) : false;
 
         return (
             <Grid item xs={6} key={adpt.pdName}>
                 <Paper
                     variant="outlined"
-                    onClick={() => !isDisable && setSelectedAdapters(prev => 
+                    onClick={() => !isDisable && setSelectedAdapters(prev =>
                         prev.includes(adpt.pdName) ? prev.filter(a => a !== adpt.pdName) : [...prev, adpt.pdName]
                     )}
                     sx={{
                         p: 1.5, display: 'flex', alignItems: 'center', cursor: isDisable ? 'default' : 'pointer',
                         borderColor: isSelected ? STATUS_COLORS.SUCCESS : isOutdated ? STATUS_COLORS.WARNING : '#cbd5e1',
-                        bgcolor: isSelected ? '#f0f7ff' : 'white', 
+                        bgcolor: isSelected ? '#f0f7ff' : 'white',
                         borderWidth: isSelected || isOutdated ? 2 : 1,
                         opacity: isDisable ? 0.6 : 1,
                         transition: 'all 0.2s',
@@ -194,9 +194,9 @@ const DeployManagerDialog = ({
                     <TableHead>
                         <TableRow>
                             <TableCell sx={{ bgcolor: '#f8fafc', fontWeight: 'bold', width: '20%' }}>배포 일시</TableCell>
-                        <TableCell sx={{ bgcolor: '#f8fafc', fontWeight: 'bold', width: '10%' }}>요청자</TableCell>
-                        <TableCell sx={{ bgcolor: '#f8fafc', fontWeight: 'bold', width: '55%' }}>대상</TableCell>
-                        <TableCell sx={{ bgcolor: '#f8fafc', fontWeight: 'bold', width: '15%' }}>상태</TableCell>
+                            <TableCell sx={{ bgcolor: '#f8fafc', fontWeight: 'bold', width: '10%' }}>요청자</TableCell>
+                            <TableCell sx={{ bgcolor: '#f8fafc', fontWeight: 'bold', width: '55%' }}>대상</TableCell>
+                            <TableCell sx={{ bgcolor: '#f8fafc', fontWeight: 'bold', width: '15%' }}>상태</TableCell>
                         </TableRow>
                     </TableHead>
                     <TableBody>
@@ -211,11 +211,13 @@ const DeployManagerDialog = ({
                                 <TableRow key={row.id}>
                                     <TableCell sx={{ fontSize: '0.75rem' }}>{row.date}</TableCell>
                                     <TableCell sx={{ fontSize: '0.75rem' }}>{row.user}</TableCell>
-                                    <TableCell sx={{ fontSize: '0.75rem' }}>{row.target}</TableCell>
+                                    <TableCell sx={{ fontSize: '0.75rem' }}>
+                                        {Array.isArray(row.target) ? row.target.join(', ') : row.target}
+                                    </TableCell>
                                     <TableCell>
-                                        <Chip 
-                                            label={current.label} size="small" variant="outlined" 
-                                            sx={{ fontSize: '0.65rem', height: 20, color: current.color, borderColor: current.color, fontWeight: 'bold' }} 
+                                        <Chip
+                                            label={current.label} size="small" variant="outlined"
+                                            sx={{ fontSize: '0.65rem', height: 20, color: current.color, borderColor: current.color, fontWeight: 'bold' }}
                                         />
                                     </TableCell>
                                 </TableRow>
@@ -246,12 +248,12 @@ const DeployManagerDialog = ({
                                 <Typography sx={{ fontSize: '0.75rem', fontWeight: 600 }}>인터페이스 최종 수정:</Typography>
                             </Stack>
                             <Typography sx={{ fontSize: '0.85rem', color: '#f8fafc', fontWeight: 'bold' }}>
-                            {lastModifiedTime ? lastModifiedTime.replace('T', ' ').split('.')[0] : '-'}
-                        </Typography>
+                                {lastModifiedTime ? lastModifiedTime.replace('T', ' ').split('.')[0] : '-'}
+                            </Typography>
                         </Stack>
                     </Paper>
                 </Box>
-                
+
                 <Tabs value={tabValue} onChange={(e, v) => setTabValue(v)} sx={{ borderBottom: 1, borderColor: 'divider' }}>
                     <Tab label="어댑터 선택" sx={{ fontSize: '0.8rem' }} />
                     <Tab label="배포 이력" sx={{ fontSize: '0.8rem' }} />
