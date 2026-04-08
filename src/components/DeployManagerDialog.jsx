@@ -103,15 +103,25 @@ const DeployManagerDialog = ({
                 adapterIds: selectedAdapters
             });
 
-            if (response.data.result === "success") {
-                alert("배포 요청이 전송되었습니다.");
-                // 성공 후 이력 탭으로 이동하여 결과 확인 유도
-                setTabValue(1);
-                if (onRefresh) onRefresh(); // 부모 화면 갱신
-            }
-        } catch (err) {
-            console.error("배포 요청 오류:", err);
-            alert("서버 통신 중 오류가 발생했습니다.");
+            // 서버 응답 구조가 response.data.result === "success" 인 경우
+        if (response.data?.result === "success" || response.status === 200) {
+            // 성공 알림 (원하시면 아래 Toast/Snackbar로 대체 가능)
+            alert(`${selectedAdapters.length}개의 어댑터에 배포 요청을 완료했습니다.`);
+            
+            // 2. 이력 탭으로 자동 이동하여 상태 확인 유도
+            setTabValue(1); 
+            
+            // 3. 부모 컴포넌트 데이터 갱신 (인터페이스 목록 등)
+            if (onRefresh) onRefresh();
+            
+            // 4. 이력 데이터 즉시 새로고침
+            await loadDeployHistory();
+        } else {
+            throw new Error("배포 요청 실패");
+        }
+    } catch (err) {
+        console.error("배포 요청 오류:", err);
+        alert("배포 요청 중 오류가 발생했습니다. 서버 로그를 확인해주세요.");
         } finally {
             setLoading(false);
         }
