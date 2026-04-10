@@ -7,27 +7,37 @@ import {
 } from '@mui/material';
 import {
     RocketLaunch as RocketIcon,
-    Folder as FolderIcon,
-    Cancel as CancelIcon,
-    PauseCircle as PauseIcon,
-    CheckCircle as CheckIcon,
     Refresh as RefreshIcon,
     ExpandMore as ExpandMoreIcon,
     ExpandLess as ExpandLessIcon,
     Update as UpdateIcon,
-    WarningAmber as WarningIcon,
-    History as HistoryIcon
+    CheckCircle as CheckIcon,
+    PauseCircle as PauseIcon,
+    Cancel as CancelIcon,
+    WarningAmber as WarningIcon
 } from '@mui/icons-material';
 import { interfaceApi } from '../api/interfaceApi';
 
-// --- 색상 상수 관리 ---
+const formatDeployVersion = (isoString) => {
+    if (!isoString) return '';
+    const date = new Date(isoString);
+    const pad = (n) => n.toString().padStart(2, '0');
+    const yy = date.getFullYear().toString().slice(-2);
+    const mm = pad(date.getMonth() + 1);
+    const dd = pad(date.getDate());
+    const hh = pad(date.getHours());
+    const mi = pad(date.getMinutes());
+    const ss = pad(date.getSeconds());
+    return `${yy}${mm}${dd}${hh}${mi}${ss}`;
+};
+
 const STATUS_COLORS = {
-    SUCCESS: '#3b82f6', // 파란색 (배포 완료)
-    PENDING: '#f59e0b', // 주황색 (배포 중 / 기동중)
-    FAIL: '#ef4444',    // 빨간색 (배포 실패)
-    OPERATING: '#10b981', // 초록색 (운영중)
-    STOP: '#64748b',    // 회색 (정지)
-    WARNING: '#f97316'  // 진한 주황 (수정 후 미배포 강조)
+    SUCCESS: '#3b82f6',
+    PENDING: '#f59e0b',
+    FAIL: '#ef4444',
+    OPERATING: '#10b981',
+    STOP: '#64748b',
+    WARNING: '#f97316'
 };
 
 const DeployManagerDialog = ({
@@ -35,7 +45,8 @@ const DeployManagerDialog = ({
     onClose,
     interfaceId,
     interfaceName,
-    lastModifiedTime, // 부모로부터 받은 인터페이스 수정 시간
+    useYn, // 부모로부터 전달받음 ('Y' 또는 'N')
+    lastModifiedTime,
     onRefresh
 }) => {
     // --- 1. States ---
@@ -46,88 +57,93 @@ const DeployManagerDialog = ({
     const [selectedAdapters, setSelectedAdapters] = useState([]);
     const [selectedProject, setSelectedProject] = useState('DEPLOYED_ONLY');
     const [isProjectListOpen, setIsProjectListOpen] = useState(false);
-    const [confirmOpen, setConfirmOpen] = useState(false); // 확인 다이얼로그 상태
+    const [confirmOpen, setConfirmOpen] = useState(false);
 
-    // --- 2. 데이터 로드 로직 ---
+    // 인터페이스 미사용 여부 판단
+    const isDisabledInterface = useYn === 'N';
+
+    // --- 2. 초기화 로직 (사용여부에 따른 탭 설정) ---
+    useEffect(() => {
+        if (open) {
+            if (isDisabledInterface) {
+                setTabValue(1); // 미사용 시 '배포 이력' 탭 고정
+            } else {
+                setTabValue(0); // 사용 중일 때 기본 탭
+            }
+        }
+    }, [open, isDisabledInterface]);
+
+    // --- 3. 데이터 로드 로직 ---
     const loadInitialData = useCallback(async () => {
-        if (!interfaceId) return;
+        if (!interfaceId || isDisabledInterface) return; // 미사용 시 로드 방지
         setLoading(true);
         try {
             const res = await interfaceApi.fetchAdaptorStatusWithMapping(interfaceId);
             const data = res.data || [];
-
-            // 배포 시간 순 정렬
             data.sort((a, b) => {
                 if (a.lastDeployTime && !b.lastDeployTime) return -1;
                 if (!a.lastDeployTime && b.lastDeployTime) return 1;
                 return new Date(b.lastDeployTime) - new Date(a.lastDeployTime);
             });
             setAdapters(data);
-
-            // 초기 선택: 운영 중인 어댑터 자동 선택
             const mappedIds = data
                 .filter(item => item.isMapped === 'Y' && String(item.finalMoStatus) === '1')
                 .map(item => item.pdName);
             setSelectedAdapters(mappedIds);
         } catch (err) { console.error("데이터 로드 실패:", err); }
         finally { setLoading(false); }
-    }, [interfaceId]);
+    }, [interfaceId, isDisabledInterface]);
 
-    const loadDeployHistory = async () => {
+    const loadDeployHistory = useCallback(async () => {
+        if (!interfaceId) return;
         setLoading(true);
         try {
             const res = await interfaceApi.fetchDeployHistory(interfaceId);
-            const formattedData = (res.data || []).map(row => ({
+            setHistory((res.data || []).map(row => ({
                 id: row.deploySeq,
                 date: row.deployedAt,
+                version: row.deployVersion || '-',
                 user: row.deployedBy,
-                target: row.targetAdapters,
-                status: row.resultCode // 'S', 'P', 'F'
-            }));
-            setHistory(formattedData);
+                target: row.targetAdapter,
+                status: row.resultCode
+            })));
         } catch (err) { console.error("이력 로드 실패:", err); }
         finally { setLoading(false); }
-    };
+    }, [interfaceId]);
 
     useEffect(() => {
-        if (open) tabValue === 0 ? loadInitialData() : loadDeployHistory();
-    }, [open, tabValue, loadInitialData]);
+        if (open) {
+            tabValue === 0 ? loadInitialData() : loadDeployHistory();
+        }
+    }, [open, tabValue, loadInitialData, loadDeployHistory]);
 
-    // --- 3. 배포 실행 로직 (요청하신 부분 통합) ---
+    // --- 4. 배포 실행 로직 ---
     const handleFinalDeploy = async () => {
         setConfirmOpen(false);
         setLoading(true);
+        const version = formatDeployVersion(lastModifiedTime);
         try {
             const response = await interfaceApi.requestAsyncDeploy({
                 interfaceId,
-                adapterIds: selectedAdapters
+                adapterIds: selectedAdapters,
+                deployVersion: version
             });
-
-            // 서버 응답 구조가 response.data.result === "success" 인 경우
-        if (response.data?.result === "success" || response.status === 200) {
-            // 성공 알림 (원하시면 아래 Toast/Snackbar로 대체 가능)
-            alert(`${selectedAdapters.length}개의 어댑터에 배포 요청을 완료했습니다.`);
-            
-            // 2. 이력 탭으로 자동 이동하여 상태 확인 유도
-            setTabValue(1); 
-            
-            // 3. 부모 컴포넌트 데이터 갱신 (인터페이스 목록 등)
-            if (onRefresh) onRefresh();
-            
-            // 4. 이력 데이터 즉시 새로고침
-            await loadDeployHistory();
-        } else {
-            throw new Error("배포 요청 실패");
-        }
-    } catch (err) {
-        console.error("배포 요청 오류:", err);
-        alert("배포 요청 중 오류가 발생했습니다. 서버 로그를 확인해주세요.");
+            if (response.data?.result === "success" || response.status === 200) {
+                alert(`${selectedAdapters.length}개의 어댑터에 배포 요청을 완료했습니다.`);
+                setTabValue(1);
+                if (onRefresh) onRefresh();
+                await loadDeployHistory();
+            } else {
+                throw new Error("배포 요청 실패");
+            }
+        } catch (err) {
+            alert("배포 요청 중 오류가 발생했습니다.");
         } finally {
             setLoading(false);
         }
     };
 
-    // --- 4. UI Render Helpers ---
+    // --- 5. UI Render Helpers ---
     const getStatusUI = useCallback((status) => {
         const s = String(status);
         const configs = {
@@ -150,13 +166,10 @@ const DeployManagerDialog = ({
         }, {});
     }, [adapters]);
 
-    // --- 5. 어댑터 카드 (비교 로직 포함) ---
     const renderAdapterCard = (adpt) => {
         const isDisable = String(adpt.finalMoStatus) !== '1';
         const isSelected = selectedAdapters.includes(adpt.pdName);
         const ui = getStatusUI(adpt.finalMoStatus);
-
-        // 최종 수정 시간과 비교하여 경고 표시
         const isOutdated = adpt.lastDeployTime && lastModifiedTime
             ? new Date(adpt.lastDeployTime) < new Date(lastModifiedTime) : false;
 
@@ -173,7 +186,6 @@ const DeployManagerDialog = ({
                         bgcolor: isSelected ? '#f0f7ff' : 'white',
                         borderWidth: isSelected || isOutdated ? 2 : 1,
                         opacity: isDisable ? 0.6 : 1,
-                        transition: 'all 0.2s',
                         '&:hover': { borderColor: isDisable ? '#e2e8f0' : STATUS_COLORS.SUCCESS }
                     }}
                 >
@@ -196,17 +208,19 @@ const DeployManagerDialog = ({
         );
     };
 
-    // --- 6. 배포 이력 탭 (상태 색상 복구 버전) ---
     const renderDeployHistory = () => (
         <Box sx={{ p: 2, height: '100%', overflowY: 'auto' }}>
             <TableContainer component={Paper} variant="outlined">
-                <Table size="small" stickyHeader>
+                {/* 1. tableLayout: 'fixed'를 추가해야 width 설정이 강제로 적용됩니다. */}
+                <Table size="small" stickyHeader sx={{ tableLayout: 'fixed', minWidth: 650 }}>
                     <TableHead>
                         <TableRow>
-                            <TableCell sx={{ bgcolor: '#f8fafc', fontWeight: 'bold', width: '20%' }}>배포 일시</TableCell>
-                            <TableCell sx={{ bgcolor: '#f8fafc', fontWeight: 'bold', width: '10%' }}>요청자</TableCell>
-                            <TableCell sx={{ bgcolor: '#f8fafc', fontWeight: 'bold', width: '55%' }}>대상</TableCell>
-                            <TableCell sx={{ bgcolor: '#f8fafc', fontWeight: 'bold', width: '15%' }}>상태</TableCell>
+                            {/* 2. 날짜와 버전은 최소 140~150px 정도는 되어야 줄바꿈이 안 일어납니다. */}
+                            <TableCell align="center" sx={{ bgcolor: '#f8fafc', fontWeight: 'bold', width: '160px' }}>배포 일시</TableCell>
+                            <TableCell align="center" sx={{ bgcolor: '#f8fafc', fontWeight: 'bold', width: '120px' }}>배포 버전</TableCell>
+                            <TableCell align="center" sx={{ bgcolor: '#f8fafc', fontWeight: 'bold', width: '80px' }}>요청자</TableCell>
+                            <TableCell align="center" sx={{ bgcolor: '#f8fafc', fontWeight: 'bold' }}>대상</TableCell>
+                            <TableCell align="center" sx={{ bgcolor: '#f8fafc', fontWeight: 'bold', width: '130px' }}>상태</TableCell>
                         </TableRow>
                     </TableHead>
                     <TableBody>
@@ -217,18 +231,29 @@ const DeployManagerDialog = ({
                                 'F': { label: '배포 실패', color: STATUS_COLORS.FAIL }
                             };
                             const current = statusMap[row.status] || { label: '기타', color: '#64748b' };
+
                             return (
-                                <TableRow key={row.id}>
+                                <TableRow key={row.id} hover>
+                                    {/* 4. Body 셀들도 정렬을 맞추기 위해 align="center" 추가 */}
                                     <TableCell sx={{ fontSize: '0.75rem' }}>{row.date}</TableCell>
-                                    <TableCell sx={{ fontSize: '0.75rem' }}>{row.user}</TableCell>
-                                    <TableCell sx={{ fontSize: '0.75rem' }}>
+                                    <TableCell align="center" sx={{ fontSize: '0.75rem', fontWeight: '500', color: '#1e293b' }}>
+                                        {row.version}
+                                    </TableCell>
+                                    <TableCell align="center" sx={{ fontSize: '0.75rem' }}>{row.user}</TableCell>
+
+                                    {/* 5. 데이터가 너무 길어질 경우를 대비한 텍스트 처리 */}
+                                    <TableCell sx={{
+                                        fontSize: '0.75rem',
+                                        px: 2,
+                                        whiteSpace: 'nowrap',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis'
+                                    }}>
                                         {Array.isArray(row.target) ? row.target.join(', ') : row.target}
                                     </TableCell>
-                                    <TableCell>
-                                        <Chip
-                                            label={current.label} size="small" variant="outlined"
-                                            sx={{ fontSize: '0.65rem', height: 20, color: current.color, borderColor: current.color, fontWeight: 'bold' }}
-                                        />
+
+                                    <TableCell align="center">
+                                        <Chip label={current.label} size="small" variant="outlined" sx={{ fontSize: '0.65rem', color: current.color, borderColor: current.color, fontWeight: 'bold' }} />
                                     </TableCell>
                                 </TableRow>
                             );
@@ -242,15 +267,20 @@ const DeployManagerDialog = ({
     return (
         <>
             <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
-                {/* 상단 다크 헤더 */}
+                {/* 상단 헤더 */}
                 <Box sx={{ bgcolor: '#1e293b', color: 'white', px: 3, py: 2 }}>
                     <Stack direction="row" justifyContent="space-between" alignItems="center">
                         <Stack direction="row" spacing={1.5} alignItems="center">
-                            <RocketIcon sx={{ color: '#38bdf8' }} />
-                            <Typography variant="subtitle1" fontWeight="bold">배포 관리 - {interfaceName}</Typography>
+                            <RocketIcon sx={{ color: isDisabledInterface ? '#94a3b8' : '#38bdf8' }} />
+                            <Typography variant="subtitle1" fontWeight="bold">
+                                배포 관리 - {interfaceName} {isDisabledInterface && "(미사용)"}
+                            </Typography>
                         </Stack>
-                        <IconButton size="small" onClick={loadInitialData} sx={{ color: 'white' }}><RefreshIcon /></IconButton>
+                        <IconButton size="small" onClick={tabValue === 0 ? loadInitialData : loadDeployHistory} sx={{ color: 'white' }}>
+                            <RefreshIcon />
+                        </IconButton>
                     </Stack>
+                    {/* 수정 시간 정보 */}
                     <Paper variant="outlined" sx={{ mt: 1.5, bgcolor: '#0f172a', borderColor: '#334155', p: 1.2 }}>
                         <Stack direction="row" spacing={2} alignItems="center">
                             <Stack direction="row" spacing={0.5} alignItems="center" sx={{ color: '#94a3b8' }}>
@@ -264,14 +294,15 @@ const DeployManagerDialog = ({
                     </Paper>
                 </Box>
 
+                {/* 탭 제어: 미사용 시 '어댑터 선택' 숨김 */}
                 <Tabs value={tabValue} onChange={(e, v) => setTabValue(v)} sx={{ borderBottom: 1, borderColor: 'divider' }}>
-                    <Tab label="어댑터 선택" sx={{ fontSize: '0.8rem' }} />
+                    {!isDisabledInterface && <Tab label="어댑터 선택" sx={{ fontSize: '0.8rem' }} />}
                     <Tab label="배포 이력" sx={{ fontSize: '0.8rem' }} />
                 </Tabs>
 
                 <DialogContent sx={{ p: 0, height: '55vh' }}>
                     {loading ? <Box sx={{ display: 'flex', justifyContent: 'center', mt: 10 }}><CircularProgress /></Box> : (
-                        tabValue === 0 ? (
+                        tabValue === 0 && !isDisabledInterface ? (
                             <Box sx={{ display: 'flex', width: '100%', height: '100%' }}>
                                 <Box sx={{ width: 220, borderRight: '1px solid #e2e8f0', bgcolor: 'white' }}>
                                     <List disablePadding>
@@ -305,9 +336,12 @@ const DeployManagerDialog = ({
                 </DialogContent>
 
                 <DialogActions sx={{ p: 2, borderTop: '1px solid #e2e8f0' }}>
-                    <Typography variant="caption" sx={{ flexGrow: 1, ml: 2 }}>선택됨: <b>{selectedAdapters.length}</b>개</Typography>
+                    {!isDisabledInterface && tabValue === 0 && (
+                        <Typography variant="caption" sx={{ flexGrow: 1, ml: 2 }}>선택됨: <b>{selectedAdapters.length}</b>개</Typography>
+                    )}
                     <Button onClick={onClose} color="inherit">닫기</Button>
-                    {tabValue === 0 && (
+                    {/* 탭이 0(어댑터 선택)이고 사용 중일 때만 버튼 표시 */}
+                    {!isDisabledInterface && tabValue === 0 && (
                         <Button variant="contained" color="primary" startIcon={<RocketIcon />} onClick={() => setConfirmOpen(true)} disabled={selectedAdapters.length === 0}>
                             배포 실행
                         </Button>
@@ -315,7 +349,7 @@ const DeployManagerDialog = ({
                 </DialogActions>
             </Dialog>
 
-            {/* 최종 배포 확인 다이얼로그 (통합됨) */}
+            {/* 확인 다이얼로그 (기존 로직 유지) */}
             <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} PaperProps={{ sx: { borderRadius: 2, width: '450px' } }}>
                 <DialogTitle sx={{ bgcolor: '#f8fafc', py: 2 }}>
                     <Stack direction="row" spacing={1} alignItems="center">

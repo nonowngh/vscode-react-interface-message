@@ -145,6 +145,7 @@ const InterfacePage = () => {
           open={deployOpen}
           interfaceId={deployTarget?.interfaceId}
           interfaceName={deployTarget?.interfaceName}
+          useYn={deployTarget?.useYn}
           lastModifiedTime={deployTarget?.updatedAt}
           onClose={() => setDeployOpen(false)}
           onRefresh={loadData} // 배포 완료 후 메인 그리드 상태(Y) 갱신용
