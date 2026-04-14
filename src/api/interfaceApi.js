@@ -9,6 +9,12 @@ export const interfaceApi = {
   /** 목록 조회 */
   fetchList: () => axiosInstance.get('/api/v1/interfaces'),
 
+  /** 상세 조회 (추가됨) */
+  getDetail: (interfaceId) => axiosInstance.get(`/api/v1/interfaces/${interfaceId}`),
+
+  fetchTemplateKeys: (patternType) => 
+  axiosInstance.get(`/api/v1/interfaces/properties/keys/${patternType}`),
+
   /** 저장 및 수정 */
   save: (data) => axiosInstance.post('/api/v1/interfaces', data),
 

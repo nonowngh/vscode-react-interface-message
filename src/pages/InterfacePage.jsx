@@ -40,17 +40,37 @@ const InterfacePage = () => {
   }, [loadData]);
 
   // 상세 수정 팝업 열기
-  const handleEditOpen = (item = null) => {
-    setSelectedItem(item || {
+ const handleEditOpen = async (item = null) => {
+  // 1. 신규 등록인 경우
+  if (!item || !item.interfaceId) {
+    setSelectedItem({
       interfaceId: '',
+      interfaceName: '',
       cronExpression: '',
       patternType: '',
       sendSystemCode: '',
       recvSystemCode: '',
-      useYn: 'N'
+      useYn: 'N',
+      properties: [],
+      sqls: []
     });
     setEditOpen(true);
-  };
+    return;
+  }
+  // 2. 수정 모드인 경우
+  setLoading(true); 
+  try {
+    // 여기서 await을 쓰려면 반드시 위 함수 선언에 async가 있어야 합니다!
+    const response = await interfaceApi.getDetail(item.interfaceId);
+    setSelectedItem(response.data);
+    setEditOpen(true);
+  } catch (err) {
+    console.error("상세 정보 로드 실패:", err);
+    alert("상세 데이터를 불러오지 못했습니다.");
+  } finally {
+    setLoading(false);
+  }
+};
 
   // 🚀 배포 관리 팝업 열기 (그리드의 배포 상태 칩 클릭 시 호출)
   const handleDeployOpen = (item) => {
@@ -134,6 +154,7 @@ const InterfacePage = () => {
         <InterfaceDialog
           open={editOpen}
           data={selectedItem}
+          rows={rows}
           onClose={() => setEditOpen(false)}
           onSave={handleSave}
         />
