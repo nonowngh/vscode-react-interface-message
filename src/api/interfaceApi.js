@@ -12,8 +12,8 @@ export const interfaceApi = {
   /** 상세 조회 (추가됨) */
   getDetail: (interfaceId) => axiosInstance.get(`/api/v1/interfaces/${interfaceId}`),
 
-  fetchTemplateKeys: (patternType) => 
-  axiosInstance.get(`/api/v1/interfaces/properties/keys/${patternType}`),
+  fetchTemplateKeys: (patternType) =>
+    axiosInstance.get(`/api/v1/interfaces/properties/keys/${patternType}`),
 
   /** 저장 및 수정 */
   save: (data) => axiosInstance.post('/api/v1/interfaces', data),
@@ -45,4 +45,10 @@ export const interfaceApi = {
 
   /** 특정 인터페이스의 배포 이력 조회 */
   fetchDeployHistory: (interfaceId) => axiosInstance.get(`/api/deploy/history/${interfaceId}`),
+
+  // 전체 테이블 목록 조회
+  fetchTables: () => axiosInstance.get('/api/metadata/tables'),
+
+  // 특정 테이블의 컬럼 목록 조회
+  fetchColumns: (tableName) => axiosInstance.get(`/api/metadata/columns/${tableName}`),
 };

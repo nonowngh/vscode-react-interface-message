@@ -11,12 +11,25 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import AddIcon from '@mui/icons-material/Add'; // 추가
 import DeleteIcon from '@mui/icons-material/Delete'; // 추가
 import { interfaceApi } from '../api/interfaceApi';
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
+import QueryBuilderDialog from './QueryBuilderDialog';
 
 const InterfaceDialog = ({ open, data, rows = [], onClose, onSave }) => {
   const initialFormState = {
     interfaceId: '', interfaceName: '', patternType: '', patternName: '',
     interfaceType: '', interfaceTypeName: '', cronExpression: '',
     sendSystemCode: '', recvSystemCode: '', useYn: 'N'
+  };
+
+  // [추가] 자동 쿼리 생성 모달 관련 상태
+  const [queryBuilderOpen, setQueryBuilderOpen] = useState(false);
+  // [추가] 실제 쿼리 생성 후 적용하는 핸들러
+  const handleApplyGeneratedQuery = (generatedSql) => {
+    setCurrentSql(prev => ({
+      ...prev,
+      sqlContent: generatedSql
+    }));
+    setQueryBuilderOpen(false);
   };
 
   // SQL 관련 상태 확장
@@ -46,32 +59,54 @@ const InterfaceDialog = ({ open, data, rows = [], onClose, onSave }) => {
   };
 
   // SQL 목록에 추가 (임시 저장)
-  const handleAddSql = () => {
-    if (!currentSql.sqlId || !currentSql.sqlContent) {
-      alert("SQL ID와 Query를 모두 입력해주세요.");
-      return;
-    }
-    setSqlList(prev => [...prev, { ...currentSql, id: Date.now() }]);
-    setCurrentSql({ sqlId: '', sqlContent: '' }); // 입력창 초기화
-  };
+  // const handleAddSql = () => {
+  //   if (!currentSql.sqlId || !currentSql.sqlContent) {
+  //     alert("SQL ID와 Query를 모두 입력해주세요.");
+  //     return;
+  //   }
+  //   setSqlList(prev => [...prev, { ...currentSql, id: Date.now() }]);
+  //   setCurrentSql({ sqlId: '', sqlContent: '' }); // 입력창 초기화
+  // };
 
   // SQL 추가 또는 수정 완료
   const handleAddOrUpdateSql = () => {
-    if (!currentSql.sqlId || !currentSql.sqlContent || !currentSql.sqlType) {
-      alert("SQL ID, 유형, Query를 모두 입력해주세요.");
+    // 1. 유효성 검사
+    if (!currentSql.sqlId?.trim() || !currentSql.sqlContent?.trim()) {
+      alert("SQL ID와 Query를 모두 입력해주세요.");
       return;
     }
+
     if (editingId) {
-      // 🔄 수정 모드: 기존 목록에서 ID가 일치하는 항목을 찾아 업데이트
+      // 🔄 [수정 모드] 나를 제외한 다른 항목 중 중복 ID가 있는지 확인
+      const isDuplicate = sqlList.some(
+        item => item.id !== editingId && item.sqlId === currentSql.sqlId
+      );
+      if (isDuplicate) {
+        alert(`이미 존재하는 SQL ID입니다: ${currentSql.sqlId}`);
+        return;
+      }
+
       setSqlList(prev => prev.map(item =>
         item.id === editingId ? { ...currentSql, id: editingId } : item
       ));
-      setEditingId(null); // 수정 완료 후 초기화
+      setEditingId(null);
     } else {
-      // ➕ 신규 추가 모드
+      // ➕ [신규 추가 모드] 전체 목록 중 중복 ID가 있는지 확인
+      const isDuplicate = sqlList.some(item => item.sqlId === currentSql.sqlId);
+      if (isDuplicate) {
+        alert(`이미 존재하는 SQL ID입니다: ${currentSql.sqlId}`);
+        return; // 🛑 중복이면 여기서 중단되어 목록에 추가되지 않음
+      }
+
       setSqlList(prev => [...prev, { ...currentSql, id: Date.now() }]);
     }
-    setCurrentSql({ sqlId: '', sqlContent: '' }); // 입력창 비우기
+
+    // 3. 입력창 초기화
+    setCurrentSql({
+      sqlId: `${formData.interfaceId}.`,
+      sqlType: 'SELECT',
+      sqlContent: ''
+    });
   };
 
   // 수정 취소 (입력창 비우기)
@@ -214,29 +249,29 @@ const InterfaceDialog = ({ open, data, rows = [], onClose, onSave }) => {
   }, []);
 
   useEffect(() => {
-  if (open && data) {
-    fetchPatterns();
-    setFormData(data || initialFormState);
-    // 1. 프로퍼티 설정 매핑
-    const mappedDetails = (data?.properties || []).map((p, index) => ({
-      ...p,
-      id: p.id || `prop-${index}-${Date.now()}`
-    }));
-    setDetailRows(mappedDetails);
-    // 2. SQL 정보 매핑 (핵심 수정 부분)
-    // 백엔드: { sqlId, sqlType, sqlQuery }
-    // 프론트엔드: { sqlId, sqlType, sqlContent } <- UI에서 sqlContent를 쓰고 있다면!
-    const mappedSqls = (data?.sqls || []).map((s, index) => ({
-      id: s.id || `${s.sqlId}-${index}-${Date.now()}`, 
-      interfaceId: s.interfaceId,
-      sqlId: s.sqlId,
-      sqlType: s.sqlType ? s.sqlType.toUpperCase() : 'SELECT',
-      sqlContent: s.sqlQuery
-    }));
-    setSqlList(mappedSqls);
-    setShowDetail(false);
-  }
-}, [open, data, fetchPatterns]);
+    if (open && data) {
+      fetchPatterns();
+      setFormData(data || initialFormState);
+      // 1. 프로퍼티 설정 매핑
+      const mappedDetails = (data?.properties || []).map((p, index) => ({
+        ...p,
+        id: p.id || `prop-${index}-${Date.now()}`
+      }));
+      setDetailRows(mappedDetails);
+      // 2. SQL 정보 매핑 (핵심 수정 부분)
+      // 백엔드: { sqlId, sqlType, sqlQuery }
+      // 프론트엔드: { sqlId, sqlType, sqlContent } <- UI에서 sqlContent를 쓰고 있다면!
+      const mappedSqls = (data?.sqls || []).map((s, index) => ({
+        id: s.id || `${s.sqlId}-${index}-${Date.now()}`,
+        interfaceId: s.interfaceId,
+        sqlId: s.sqlId,
+        sqlType: s.sqlType ? s.sqlType.toUpperCase() : 'SELECT',
+        sqlContent: s.sqlQuery
+      }));
+      setSqlList(mappedSqls);
+      setShowDetail(false);
+    }
+  }, [open, data, fetchPatterns]);
 
   const handleChange = (e) => {
     const { name, value, checked, type } = e.target;
@@ -272,23 +307,28 @@ const InterfaceDialog = ({ open, data, rows = [], onClose, onSave }) => {
     });
   };
 
-  const handleUpdateSql = () => {
-  if (!currentSql.sqlId || !currentSql.sqlContent) {
-    alert("SQL ID와 내용을 모두 입력해주세요.");
-    return;
-  }
-  // sqlList에서 현재 수정 중인 ID와 일치하는 항목을 찾아 교체
-  setSqlList(prev => prev.map(item => 
-    item.id === editingId ? { ...currentSql, id: editingId } : item
-  ));
-  // 입력창 초기화 및 수정 모드 종료
-  setEditingId(null);
-  setCurrentSql({ 
-    sqlId: `${formData.interfaceId}.`, 
-    sqlType: 'SELECT', 
-    sqlContent: '' 
-  });
-};
+  // const handleUpdateSql = () => {
+  //   if (!currentSql.sqlId || !currentSql.sqlContent) {
+  //     alert("SQL ID와 내용을 모두 입력해주세요.");
+  //     return;
+  //   }
+  //   // sqlList에서 현재 수정 중인 ID와 일치하는 항목을 찾아 교체
+  //   setSqlList(prev => prev.map(item =>
+  //     item.id === editingId ? { ...currentSql, id: editingId } : item
+  //   ));
+  //   // 입력창 초기화 및 수정 모드 종료
+  //   setEditingId(null);
+  //   setCurrentSql({
+  //     sqlId: `${formData.interfaceId}.`,
+  //     sqlType: 'SELECT',
+  //     sqlContent: ''
+  //   });
+  // };
+
+  const isIdDuplicate = useMemo(() => {
+    if (!!data?.interfaceId) return false; // 수정 모드면 체크 안 함
+    return rows.some(row => row.interfaceId === formData.interfaceId && formData.interfaceId !== '');
+  }, [formData.interfaceId, rows, data]);
 
   const processRowUpdate = (newRow) => {
     const updatedRows = detailRows.map((row) => (row.id === newRow.id ? newRow : row));
@@ -297,37 +337,50 @@ const InterfaceDialog = ({ open, data, rows = [], onClose, onSave }) => {
   };
 
   const handleSave = () => {
-  // 1. 빈 행 검증
-  const hasEmptyRow = detailRows.some(
-    row => !row.propertyName?.trim() || !row.propertyValue?.trim()
-  );
 
-  if (hasEmptyRow) {
-    alert("상세 설정의 '설정 항목'과 '설정 값'을 모두 입력해주세요.");
-    return;
-  }
+    const isEditMode = !!data?.interfaceId; // 기존 데이터가 있으면 수정 모드
 
-  if (window.confirm("입력하신 내용을 저장하시겠습니까?")) {
-    onSave({
-      ...formData,
-      // 설정 정보 매핑
-      properties: detailRows.map(row => ({
-        interfaceId: formData.interfaceId,
-        patternCode: formData.patternType, // 👈 이 줄이 추가되어야 합니다!
-        propertyName: row.propertyName,
-        propertyValue: row.propertyValue
-      })),
-      // SQL 정보 매핑
-      sqls: sqlList.map(sql => ({
-        interfaceId: formData.interfaceId,
-        patternCode: formData.patternType, // 👈 SQL 테이블에도 pattern_code가 있다면 넣어주는 것이 안전합니다.
-        sqlId: sql.sqlId,
-        sqlType: sql.sqlType,
-        sqlQuery: sql.sqlContent 
-      }))
-    });
-  }
-};
+    if (!isEditMode) {
+      // 전체 목록(rows)에서 현재 입력한 interfaceId가 있는지 확인
+      const isDuplicateId = rows.some(row => row.interfaceId === formData.interfaceId);
+
+      if (isDuplicateId) {
+        alert(`이미 등록된 인터페이스 ID입니다: ${formData.interfaceId}`);
+        return; // 🛑 함수 종료 (onSave 호출 안 함)
+      }
+    }
+
+    // 1. 빈 행 검증
+    const hasEmptyRow = detailRows.some(
+      row => !row.propertyName?.trim() || !row.propertyValue?.trim()
+    );
+
+    if (hasEmptyRow) {
+      alert("상세 설정의 '설정 항목'과 '설정 값'을 모두 입력해주세요.");
+      return;
+    }
+
+    if (window.confirm("입력하신 내용을 저장하시겠습니까?")) {
+      onSave({
+        ...formData,
+        // 설정 정보 매핑
+        properties: detailRows.map(row => ({
+          interfaceId: formData.interfaceId,
+          patternCode: formData.patternType,
+          propertyName: row.propertyName,
+          propertyValue: row.propertyValue
+        })),
+        // SQL 정보 매핑
+        sqls: sqlList.map(sql => ({
+          interfaceId: formData.interfaceId,
+          patternCode: formData.patternType,
+          sqlId: sql.sqlId,
+          sqlType: sql.sqlType,
+          sqlQuery: sql.sqlContent
+        }))
+      });
+    }
+  };
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth={showSqlPanel ? "lg" : "md"} scroll="paper" >
@@ -349,7 +402,8 @@ const InterfaceDialog = ({ open, data, rows = [], onClose, onSave }) => {
           }}>
             <Stack spacing={3} sx={{ mt: 1 }}>
               <Stack direction="row" spacing={2}>
-                <TextField label="인터페이스 ID" name="interfaceId" value={formData.interfaceId} onChange={handleChange} fullWidth required disabled={!!data?.interfaceId} />
+                <TextField label="인터페이스 ID" name="interfaceId" value={formData.interfaceId} onChange={handleChange} fullWidth required disabled={!!data?.interfaceId} error={isIdDuplicate}
+                  helperText={isIdDuplicate ? "이미 사용 중인 아이디입니다." : ""} />
                 <TextField label="인터페이스 명" name="interfaceName" value={formData.interfaceName} onChange={handleChange} fullWidth required />
               </Stack>
 
@@ -524,9 +578,29 @@ const InterfaceDialog = ({ open, data, rows = [], onClose, onSave }) => {
               <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
 
                 {/* 1. 제목 마진 최소화 */}
-                <Typography variant="subtitle2" sx={{ mb: 0.2, fontWeight: 'bold', color: '#7b1fa2' }}>
-                  🖥️ SQL 설정 {editingId ? "(수정 중)" : "(신규 등록)"}
-                </Typography>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.5 }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: '#7b1fa2' }}>
+                    🖥️ SQL 설정 {editingId ? "(수정 중)" : "(신규 등록)"}
+                  </Typography>
+
+                  {/* 자동 생성 버튼 추가 */}
+                  <Button
+                    variant="contained"
+                    size="small"
+                    color="secondary"
+                    startIcon={<AutoFixHighIcon />} // 상단에 import 잊지 마세요!
+                    onClick={() => setQueryBuilderOpen(true)}
+                    sx={{
+                      fontSize: '0.7rem',
+                      py: 0.3,
+                      px: 1,
+                      minWidth: 'auto',
+                      lineHeight: 1.2
+                    }}
+                  >
+                    자동 생성
+                  </Button>
+                </Stack>
 
                 {/* 2. 입력 폼 컴팩트화 */}
                 <Paper variant="outlined" sx={{ p: 1.0, mb: 1.0, bgcolor: editingId ? '#fffde7' : '#fbfaff', transition: '0.3s' }}>
@@ -609,23 +683,23 @@ const InterfaceDialog = ({ open, data, rows = [], onClose, onSave }) => {
                         size="small" // 💡 버튼 크기 축소
                         color={editingId ? "warning" : "primary"}
                         fullWidth
-                        onClick={editingId !== null ? handleUpdateSql : handleAddSql}
+                        onClick={handleAddOrUpdateSql}
                         sx={{ height: '32px', fontSize: '0.85rem' }}
                       >
                         {editingId !== null ? '수정 완료' : '목록에 추가'} {/* 👈 모드에 따른 텍스트 변경 */}
-  </Button>
+                      </Button>
                       {editingId !== null && (
-    <Button
-      variant="outlined"
-      size="small"
-      onClick={() => {
-        setEditingId(null);
-        setCurrentSql({ sqlId: '', sqlType: 'SELECT', sqlContent: '' });
-      }}
-      sx={{ height: '32px', fontSize: '0.85rem', ml: 1 }}
-    >
-      취소
-    </Button>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          onClick={() => {
+                            setEditingId(null);
+                            setCurrentSql({ sqlId: '', sqlType: 'SELECT', sqlContent: '' });
+                          }}
+                          sx={{ height: '32px', fontSize: '0.85rem', ml: 1 }}
+                        >
+                          취소
+                        </Button>
                       )}
                     </Stack>
                   </Stack>
@@ -666,7 +740,7 @@ const InterfaceDialog = ({ open, data, rows = [], onClose, onSave }) => {
                           cursor: 'pointer',
                           borderBottom: '1px solid #f0f0f0',
                           bgcolor: editingId === item.id ? '#e3f2fd' : 'transparent',
-    borderLeft: editingId === item.id ? '4px solid #1976d2' : '4px solid transparent',
+                          borderLeft: editingId === item.id ? '4px solid #1976d2' : '4px solid transparent',
                           minHeight: '28px',
                           '&:hover': { bgcolor: editingId === item.id ? '#e3f2fd' : '#f5f5f5' }
                         }}
@@ -674,7 +748,7 @@ const InterfaceDialog = ({ open, data, rows = [], onClose, onSave }) => {
                         <Typography variant="body2" sx={{
                           fontSize: '0.75rem',
                           fontWeight: editingId === item.id ? 'bold' : 'normal',
-                         color: editingId === item.id ? '#1976d2' : 'inherit',
+                          color: editingId === item.id ? '#1976d2' : 'inherit',
                           lineHeight: 1,
                           whiteSpace: 'nowrap',
                           overflow: 'hidden',
@@ -684,13 +758,13 @@ const InterfaceDialog = ({ open, data, rows = [], onClose, onSave }) => {
                           {item.sqlId}
                         </Typography>
                         <IconButton
-    size="small"
-    sx={{ 
-      color: editingId === item.id ? '#d32f2f' : 'error.main', 
-      p: 0.2 
-    }}
-    onClick={(e) => handleDeleteSql(e, item)}
-  >
+                          size="small"
+                          sx={{
+                            color: editingId === item.id ? '#d32f2f' : 'error.main',
+                            p: 0.2
+                          }}
+                          onClick={(e) => handleDeleteSql(e, item)}
+                        >
                           <DeleteIcon sx={{ fontSize: '1.1rem' }} />
                         </IconButton>
                       </Box>
@@ -713,6 +787,11 @@ const InterfaceDialog = ({ open, data, rows = [], onClose, onSave }) => {
           <Button onClick={handleSave} variant="contained" disabled={!formData.interfaceId || !formData.patternType} sx={{ px: 4 }}>저장하기</Button>
         </Stack>
       </DialogActions>
+      <QueryBuilderDialog
+        open={queryBuilderOpen}
+        onClose={() => setQueryBuilderOpen(false)}
+        onApply={handleApplyGeneratedQuery}
+      />
     </Dialog>
   );
 };

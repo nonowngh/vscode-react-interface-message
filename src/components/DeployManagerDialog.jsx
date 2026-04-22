@@ -3,7 +3,10 @@ import {
     Dialog, DialogTitle, DialogContent, DialogActions, Button, Typography,
     Box, Checkbox, Grid, Paper, List, ListItem, ListItemButton, ListItemText,
     CircularProgress, Stack, ListItemIcon, Tabs, Tab, IconButton, Table,
-    TableBody, TableCell, TableContainer, TableHead, TableRow, Chip, Divider, Collapse, Tooltip
+    TableBody, TableCell, TableContainer, TableHead, TableRow, Chip, Divider, Collapse, Tooltip, FormControl,
+    InputLabel,
+    Select,
+    MenuItem
 } from '@mui/material';
 import {
     RocketLaunch as RocketIcon,
@@ -58,6 +61,8 @@ const DeployManagerDialog = ({
     const [selectedProject, setSelectedProject] = useState('DEPLOYED_ONLY');
     const [isProjectListOpen, setIsProjectListOpen] = useState(false);
     const [confirmOpen, setConfirmOpen] = useState(false);
+    const [filterVersion, setFilterVersion] = useState('ALL');
+    const [filterTarget, setFilterTarget] = useState('ALL');
 
     // 인터페이스 미사용 여부 판단
     const isDisabledInterface = useYn === 'N';
@@ -143,6 +148,31 @@ const DeployManagerDialog = ({
         }
     };
 
+    // --- 필터용 옵션 생성 ---
+    const filterOptions = useMemo(() => {
+        const versions = [...new Set(history.map(h => h.version))].filter(Boolean).sort((a, b) => b.localeCompare(a));
+
+        // 대상(Target)은 배열일 수 있으므로 펼쳐서 중복 제거
+        const targets = [...new Set(history.flatMap(h =>
+            Array.isArray(h.target) ? h.target : (h.target ? h.target.split(', ') : [])
+        ))].filter(Boolean).sort();
+
+        return { versions, targets };
+    }, [history]);
+
+    // --- 필터링된 데이터 계산 ---
+    const filteredHistory = useMemo(() => {
+        return history.filter(h => {
+            const matchVersion = filterVersion === 'ALL' || h.version === filterVersion;
+
+            // 대상 포함 여부 체크
+            const targetArray = Array.isArray(h.target) ? h.target : (h.target ? h.target.split(', ') : []);
+            const matchTarget = filterTarget === 'ALL' || targetArray.includes(filterTarget);
+
+            return matchVersion && matchTarget;
+        });
+    }, [history, filterVersion, filterTarget]);
+
     // --- 5. UI Render Helpers ---
     const getStatusUI = useCallback((status) => {
         const s = String(status);
@@ -200,7 +230,16 @@ const DeployManagerDialog = ({
                             <Typography sx={{ fontSize: '0.65rem', color: ui.color, fontWeight: 'bold' }}>{ui.text}</Typography>
                         </Stack>
                         <Typography sx={{ fontSize: '0.6rem', color: isOutdated ? STATUS_COLORS.WARNING : 'text.secondary' }}>
-                            최종: {adpt.lastDeployTime || '기록없음'}
+                            {/* 1층: 버전 정보 (굵게) */}
+                            <Box component="span" sx={{ fontWeight: 'bold', display: 'block' }}>
+                                최종 버전: {adpt.deployVersion || '기록없음'}
+                            </Box>
+                            {/* 2층: 시간 정보 (얇게) */}
+                            {adpt.lastDeployTime && (
+                                <Box component="span" sx={{ display: 'block', mt: -0.2 }}>
+                                    ({adpt.lastDeployTime})
+                                </Box>
+                            )}
                         </Typography>
                     </Box>
                 </Paper>
@@ -209,8 +248,68 @@ const DeployManagerDialog = ({
     };
 
     const renderDeployHistory = () => (
-        <Box sx={{ p: 2, height: '100%', overflowY: 'auto' }}>
-            <TableContainer component={Paper} variant="outlined">
+        <Box sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {/* 🚀 상단 필터 바 추가 */}
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ bgcolor: '#f1f5f9', p: 1, borderRadius: 1 }}>
+                <FormControl size="small" sx={{ minWidth: 130, bgcolor: 'white' }}>
+                    <InputLabel id="version-filter-label" sx={{ fontSize: '0.75rem' }}>배포 버전</InputLabel>
+                    <Select
+                        labelId="version-filter-label"
+                        label="배포 버전"
+                        value={filterVersion}
+                        onChange={(e) => setFilterVersion(e.target.value)}
+                        sx={{
+                            fontSize: '0.75rem',
+                            height: '32px', // 높이 축소
+                            '.MuiSelect-select': { py: 0.5 } // 내부 패딩 축소
+                        }}
+                    >
+                        <MenuItem value="ALL" sx={{ fontSize: '0.75rem' }}>전체 버전</MenuItem>
+                        {filterOptions.versions.map(v => (
+                            <MenuItem key={v} value={v} sx={{ fontSize: '0.75rem' }}>{v}</MenuItem>
+                        ))}
+                    </Select>
+                </FormControl>
+
+                <FormControl size="small" sx={{ minWidth: 130, bgcolor: 'white' }}>
+                    <InputLabel id="target-filter-label" sx={{ fontSize: '0.75rem' }}>배포 대상</InputLabel>
+                    <Select
+                        labelId="target-filter-label"
+                        label="배포 대상"
+                        value={filterTarget}
+                        onChange={(e) => setFilterTarget(e.target.value)}
+                        sx={{
+                            fontSize: '0.75rem',
+                            height: '32px',
+                            '.MuiSelect-select': { py: 0.5 }
+                        }}
+                    >
+                        <MenuItem value="ALL" sx={{ fontSize: '0.75rem' }}>전체 대상</MenuItem>
+                        {filterOptions.targets.map(t => (
+                            <MenuItem key={t} value={t} sx={{ fontSize: '0.75rem' }}>{t}</MenuItem>
+                        ))}
+                    </Select>
+                </FormControl>
+
+                <Button
+                    size="small"
+                    startIcon={<RefreshIcon sx={{ fontSize: '14px !important' }} />}
+                    onClick={() => { setFilterVersion('ALL'); setFilterTarget('ALL'); }}
+                    sx={{
+                        fontSize: '0.7rem',
+                        color: '#64748b',
+                        minWidth: 'auto',
+                        py: 0.5
+                    }}
+                >
+                    초기화
+                </Button>
+
+                <Typography variant="caption" sx={{ ml: 'auto', color: '#64748b', fontSize: '0.7rem', fontWeight: 'bold' }}>
+                    검색: {filteredHistory.length}건
+                </Typography>
+            </Stack>
+            <TableContainer component={Paper} variant="outlined" sx={{ flexGrow: 1, overflowY: 'auto' }}>
                 {/* 1. tableLayout: 'fixed'를 추가해야 width 설정이 강제로 적용됩니다. */}
                 <Table size="small" stickyHeader sx={{ tableLayout: 'fixed', minWidth: 650 }}>
                     <TableHead>
@@ -224,40 +323,41 @@ const DeployManagerDialog = ({
                         </TableRow>
                     </TableHead>
                     <TableBody>
-                        {history.map((row) => {
-                            const statusMap = {
-                                'S': { label: '배포 완료', color: STATUS_COLORS.SUCCESS },
-                                'P': { label: '배포 중', color: STATUS_COLORS.PENDING },
-                                'F': { label: '배포 실패', color: STATUS_COLORS.FAIL }
-                            };
-                            const current = statusMap[row.status] || { label: '기타', color: '#64748b' };
+                        {filteredHistory.length > 0 ? (
+                            filteredHistory.map((row) => {
+                                const statusMap = {
+                                    'S': { label: '배포 완료', color: STATUS_COLORS.SUCCESS },
+                                    'P': { label: '배포 중', color: STATUS_COLORS.PENDING },
+                                    'F': { label: '배포 실패', color: STATUS_COLORS.FAIL }
+                                };
+                                const current = statusMap[row.status] || { label: '기타', color: '#64748b' };
 
-                            return (
-                                <TableRow key={row.id} hover>
-                                    {/* 4. Body 셀들도 정렬을 맞추기 위해 align="center" 추가 */}
-                                    <TableCell sx={{ fontSize: '0.75rem' }}>{row.date}</TableCell>
-                                    <TableCell align="center" sx={{ fontSize: '0.75rem', fontWeight: '500', color: '#1e293b' }}>
-                                        {row.version}
-                                    </TableCell>
-                                    <TableCell align="center" sx={{ fontSize: '0.75rem' }}>{row.user}</TableCell>
-
-                                    {/* 5. 데이터가 너무 길어질 경우를 대비한 텍스트 처리 */}
-                                    <TableCell sx={{
-                                        fontSize: '0.75rem',
-                                        px: 2,
-                                        whiteSpace: 'nowrap',
-                                        overflow: 'hidden',
-                                        textOverflow: 'ellipsis'
-                                    }}>
-                                        {Array.isArray(row.target) ? row.target.join(', ') : row.target}
-                                    </TableCell>
-
-                                    <TableCell align="center">
-                                        <Chip label={current.label} size="small" variant="outlined" sx={{ fontSize: '0.65rem', color: current.color, borderColor: current.color, fontWeight: 'bold' }} />
-                                    </TableCell>
-                                </TableRow>
-                            );
-                        })}
+                                return (
+                                    <TableRow key={row.id} hover>
+                                        <TableCell sx={{ fontSize: '0.75rem' }} align="center">{row.date}</TableCell>
+                                        <TableCell align="center" sx={{ fontSize: '0.75rem', fontWeight: '500' }}>{row.version}</TableCell>
+                                        <TableCell align="center" sx={{ fontSize: '0.75rem' }}>{row.user}</TableCell>
+                                        <TableCell sx={{
+                                            fontSize: '0.75rem', px: 2, whiteSpace: 'nowrap',
+                                            overflow: 'hidden', textOverflow: 'ellipsis'
+                                        }}>
+                                            <Tooltip title={Array.isArray(row.target) ? row.target.join(', ') : row.target}>
+                                                <span>{Array.isArray(row.target) ? row.target.join(', ') : row.target}</span>
+                                            </Tooltip>
+                                        </TableCell>
+                                        <TableCell align="center">
+                                            <Chip label={current.label} size="small" variant="outlined" sx={{ fontSize: '0.65rem', color: current.color, borderColor: current.color, fontWeight: 'bold' }} />
+                                        </TableCell>
+                                    </TableRow>
+                                );
+                            })
+                        ) : (
+                            <TableRow>
+                                <TableCell colSpan={5} align="center" sx={{ py: 10, color: 'text.secondary' }}>
+                                    해당 조건에 맞는 배포 이력이 없습니다.
+                                </TableCell>
+                            </TableRow>
+                        )}
                     </TableBody>
                 </Table>
             </TableContainer>
