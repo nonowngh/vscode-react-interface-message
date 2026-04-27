@@ -42,6 +42,8 @@ export const interfaceApi = {
   /** * 컴포넌트에서 사용하는 이름과 매핑 (에러 방지용 별칭)
    */
   requestAsyncDeploy: (payload) => axiosInstance.post('/api/deploy/execute', payload),
+  
+  requestAsyncUndeploy: (payload) => axiosInstance.post('/api/deploy/cancel', payload),
 
   /** 특정 인터페이스의 배포 이력 조회 */
   fetchDeployHistory: (interfaceId) => axiosInstance.get(`/api/deploy/history/${interfaceId}`),

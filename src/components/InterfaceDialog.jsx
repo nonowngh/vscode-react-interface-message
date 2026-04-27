@@ -383,7 +383,14 @@ const InterfaceDialog = ({ open, data, rows = [], onClose, onSave }) => {
   };
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth={showSqlPanel ? "lg" : "md"} scroll="paper" >
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth={showSqlPanel ? "md" : "md"} sx={{
+      '& .MuiDialog-paper': {
+        // 패널이 열렸을 때 너무 넓어지지 않도록 고정 너비 지정 (예: 1000px)
+        width: showSqlPanel ? '1000px' : '800px',
+        maxWidth: 'none', // maxWidth 제약을 풀고 width로 제어
+        transition: 'width 0.3s ease'
+      }
+    }} >
       <DialogTitle sx={{ fontWeight: 'bold', borderBottom: '1px solid #eee', display: 'flex', color: '#07498b', justifyContent: 'space-between', alignItems: 'center' }}>
         {data?.interfaceId ? "📖 인터페이스 상세 및 수정" : "➕ 신규 인터페이스 등록"}
         {loading && <CircularProgress size={24} />}
@@ -391,7 +398,7 @@ const InterfaceDialog = ({ open, data, rows = [], onClose, onSave }) => {
 
       <DialogContent dividers>
         {/* 🏆 핵심 수정: 좌/우를 가르는 가로 Stack 생성 */}
-        <Stack direction="row" spacing={showSqlPanel ? 3 : 0} sx={{ minHeight: 300 }}>
+        <Stack direction="row" spacing={0} sx={{ minHeight: 300 }}>
 
           {/* [좌측 영역] - flex: 1로 고정 */}
           <Box sx={{
@@ -475,12 +482,18 @@ const InterfaceDialog = ({ open, data, rows = [], onClose, onSave }) => {
                       <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: '#2e7d32' }}>
                         ⚙️ 상세 설정 및 참조 항목
                       </Typography>
-                      <Button variant="contained" color="primary" startIcon={<AddIcon />} onClick={handleAddRow} size="small">
+                      <Button variant="contained" color="primary" startIcon={<AddIcon />} onClick={handleAddRow} sx={{
+                        fontSize: '0.7rem',     // 폰트 크기 축소
+                        py: 0.3,                // 상하 패딩 축소
+                        px: 1,                  // 좌우 패딩 축소
+                        minWidth: 'auto',       // 기본 최소 너비 해제
+                        lineHeight: 1.1         // 줄 간격 축소
+                      }}>
                         설정 직접 추가
                       </Button>
                     </Stack>
                     {/* 좌우 분할 구역 */}
-                    <Stack direction="row" spacing={2} sx={{ height: 250 }}>
+                    <Stack direction="row" spacing={2} sx={{ height: 200 }}>
 
                       {/* [왼쪽] 해당 패턴(P01 등)에서 이미 사용 중인 키 목록 */}
                       <Paper
@@ -572,121 +585,114 @@ const InterfaceDialog = ({ open, data, rows = [], onClose, onSave }) => {
           </Box>
 
           {/* [우측 영역]: SQL 관리 패널 */}
-          {showSqlPanel && (
-            <Stack direction="row" sx={{ flex: 1.0 }}>
-              <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} /> {/* 간격 살짝 확대 */}
-              <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-
-                {/* 1. 제목 마진 최소화 */}
-                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.5 }}>
+          <Box sx={{
+            display: 'flex',
+            width: showSqlPanel ? '400px' : '0px',
+            minWidth: showSqlPanel ? '400px' : '0px',
+            height: '450px',
+            maxHeight: '450px',
+            opacity: showSqlPanel ? 1 : 0,
+            visibility: showSqlPanel ? 'visible' : 'hidden',
+            transition: 'all 0.3s ease-in-out',
+            overflow: 'hidden',
+            whiteSpace: 'nowrap',
+            borderLeft: showSqlPanel ? '1px solid #e0e0e0' : 'none',
+            bgcolor: '#fcfcfc',
+            position: 'sticky', // 🚀 핵심 수정 2: 좌측이 길어져도 패널은 화면에 붙어있게 함
+            top: 0
+          }}>
+            <Box sx={{
+              width: '100%',
+              height: '100%', // 부모의 600px를 그대로 물려받음
+              p: 1.5,
+              display: 'flex',
+              flexDirection: 'column',
+              boxSizing: 'border-box'
+            }}>
+              {/* 상단 입력 폼 영역 (높이 고정) */}
+              <Box sx={{ flexShrink: 0 }}>      {/* 1. 제목 및 자동 생성 버튼 */}
+                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1, width: '100%' }}>
                   <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: '#7b1fa2' }}>
                     🖥️ SQL 설정 {editingId ? "(수정 중)" : "(신규 등록)"}
                   </Typography>
-
-                  {/* 자동 생성 버튼 추가 */}
                   <Button
                     variant="contained"
                     size="small"
                     color="secondary"
-                    startIcon={<AutoFixHighIcon />} // 상단에 import 잊지 마세요!
+                    startIcon={<AutoFixHighIcon />}
                     onClick={() => setQueryBuilderOpen(true)}
                     sx={{
-                      fontSize: '0.7rem',
-                      py: 0.3,
-                      px: 1,
-                      minWidth: 'auto',
-                      lineHeight: 1.2
+                      fontSize: '0.65rem',
+                      py: 0.2,
+                      px: 0.8,
+                      minWidth: 'auto'
+
                     }}
                   >
                     자동 생성
                   </Button>
                 </Stack>
 
-                {/* 2. 입력 폼 컴팩트화 */}
-                <Paper variant="outlined" sx={{ p: 1.0, mb: 1.0, bgcolor: editingId ? '#fffde7' : '#fbfaff', transition: '0.3s' }}>
-                  <Stack spacing={0}>
+                {/* 2. 입력 폼 영역 */}
+                <Paper variant="outlined" sx={{ p: 1, mb: 1, bgcolor: editingId ? '#fffde7' : '#fbfaff', width: '100%', boxSizing: 'border-box', minWidth: 0 }}>
+                  <Stack spacing={1.2} sx={{ width: '100%' }}>
                     <TextField
                       label="SQL ID" size="small" fullWidth
                       value={currentSql.sqlId}
                       onChange={(e) => setCurrentSql({ ...currentSql, sqlId: e.target.value })}
                       sx={{
-                        flex: 2,
-                        '& .MuiInputBase-root': { height: '32px' }, // 전체 높이 고정
-                        '& .MuiInputBase-input': {
-                          py: 0,
-                          fontSize: '0.85rem',
-                          height: '32px',
-                          boxSizing: 'border-box'
-                        },
-                        '& .MuiInputLabel-root': {
-                          fontSize: '0.85rem',
-                          transform: 'translate(14px, 7px) scale(1)' // 라벨 위치 중앙 조정
-                        },
-                        '& .MuiInputLabel-shrink': {
-                          transform: 'translate(14px, -8px) scale(0.75)' // 포커스 시 라벨 위치
-                        }
+                        '& .MuiInputBase-root': { height: '32px' },
+                        '& .MuiInputBase-input': { py: 0, fontSize: '0.8rem', height: '32px', boxSizing: 'border-box' },
+                        '& .MuiInputLabel-root': { fontSize: '0.8rem', transform: 'translate(14px, 7px) scale(1)' },
+                        '& .MuiInputLabel-shrink': { transform: 'translate(14px, -8px) scale(0.75)' }
                       }}
                     />
                     <TextField
-                      select label="SQL TYPE" size="small" sx={{
-                        flex: 1,
-                        '& .MuiInputBase-root': { height: '32px' }, // ID 필드와 높이 통일
-                        '& .MuiInputBase-input': {
-                          py: 0,
-                          fontSize: '0.85rem',
-                          display: 'flex',
-                          alignItems: 'center',
-                          height: '32px',
-                          boxSizing: 'border-box'
-                        },
-                        '& .MuiInputLabel-root': {
-                          fontSize: '0.85rem',
-                          transform: 'translate(14px, 7px) scale(1)'
-                        },
-                        '& .MuiInputLabel-shrink': {
-                          transform: 'translate(14px, -8px) scale(0.75)'
-                        }
-                      }}
-                      value={currentSql.sqlType || ''} // 👈 값이 없으면(null/empty) 'SELECT'를 보여줘라
+                      select label="SQL TYPE" size="small"
+                      value={currentSql.sqlType || ''}
                       onChange={handleSqlTypeChange}
+                      sx={{
+                        '& .MuiInputBase-root': { height: '32px' },
+                        '& .MuiInputBase-input': { py: 0, fontSize: '0.8rem', display: 'flex', alignItems: 'center', height: '32px', boxSizing: 'border-box' },
+                        '& .MuiInputLabel-root': { fontSize: '0.8rem', transform: 'translate(14px, 7px) scale(1)' },
+                        '& .MuiInputLabel-shrink': { transform: 'translate(14px, -8px) scale(0.75)' }
+                      }}
                     >
                       {['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'UPSERT'].map((type) => (
                         <MenuItem key={type} value={type} sx={{ fontSize: '0.8rem' }}>{type}</MenuItem>
                       ))}
                     </TextField>
-                    <Box>
-                      <TextField
-                        label="SQL Query"
-                        multiline
-                        rows={8} // 💡 8줄에서 5줄로 줄여서 위쪽 공간 확보
-                        // maxRows={8} // 내용이 많아지면 8줄까지는 유동적으로 늘어남
-                        fullWidth
-                        value={currentSql.sqlContent || ''}
-                        onChange={(e) => setCurrentSql({ ...currentSql, sqlContent: e.target.value })}
-                        placeholder="SELECT * FROM TABLE WHERE ID = :id (JdbcTemplate 형식)"
-                        sx={{
-                          mt: 1.5,
-                          minHeight: '180px',
-                          maxHeight: '180px',
-                          overflowY: 'auto',
-                          border: '1px solid #eee',
-                          '& .MuiInputBase-root': { fontFamily: 'monospace', fontSize: '0.7rem' },
+
+                    <TextField
+                      label="SQL Query"
+                      multiline
+                      rows={6}
+                      fullWidth
+                      value={currentSql.sqlContent || ''}
+                      onChange={(e) => setCurrentSql({ ...currentSql, sqlContent: e.target.value })}
+                      placeholder="SELECT * FROM TABLE WHERE ID = :id"
+                      sx={{
+                        mt: 0.5,
+                        '& .MuiInputBase-root': {
+                          fontFamily: 'monospace',
+                          fontSize: '0.65rem',
                           bgcolor: '#fff',
-                          mb: 0
-                        }}
-                      />
-                    </Box>
+                          lineHeight: 1.2, // 줄 간격을 좁히면 더 많은 코드가 한눈에 들어옵니다
+                        }
+                        , minWidth: 0
+                      }}
+                    />
 
                     <Stack direction="row" spacing={1} sx={{ mt: 0.5 }}>
                       <Button
                         variant="contained"
-                        size="small" // 💡 버튼 크기 축소
+                        size="small"
                         color={editingId ? "warning" : "primary"}
                         fullWidth
                         onClick={handleAddOrUpdateSql}
-                        sx={{ height: '32px', fontSize: '0.85rem' }}
+                        sx={{ height: '26px', fontSize: '0.8rem' }}
                       >
-                        {editingId !== null ? '수정 완료' : '목록에 추가'} {/* 👈 모드에 따른 텍스트 변경 */}
+                        {editingId !== null ? '수정 완료' : '목록에 추가'}
                       </Button>
                       {editingId !== null && (
                         <Button
@@ -696,7 +702,7 @@ const InterfaceDialog = ({ open, data, rows = [], onClose, onSave }) => {
                             setEditingId(null);
                             setCurrentSql({ sqlId: '', sqlType: 'SELECT', sqlContent: '' });
                           }}
-                          sx={{ height: '32px', fontSize: '0.85rem', ml: 1 }}
+                          sx={{ height: '26px', fontSize: '0.8rem' }}
                         >
                           취소
                         </Button>
@@ -705,22 +711,35 @@ const InterfaceDialog = ({ open, data, rows = [], onClose, onSave }) => {
                   </Stack>
                 </Paper>
 
-                {/* 3. 목록 영역 높이 현실화 및 여백 제거 */}
-                <Typography variant="caption" sx={{ fontWeight: 'bold', mb: 0.1, display: 'block' }}>
+                {/* 3. 목록 영역 */}
+                <Typography variant="caption" sx={{ fontWeight: 'bold', mb: 0.5, display: 'block' }}>
                   목록 (총 {sqlList.length}건)
                 </Typography>
 
                 <Box sx={{
-                  // 💡 30px는 너무 작으므로 150px~180px 정도로 설정하여 안정감 확보
-                  flex: 1,
-                  minHeight: '120px',
-                  maxHeight: '120px',
+                  // 1. 높이 제한 (가장 중요: 이 높이를 넘어야 스크롤이 생김)
+                  maxHeight: '100px',
+                  // minHeight: '100px', // 최소 높이 보장
                   overflowY: 'auto',
                   border: '1px solid #eee',
                   borderRadius: 1,
-                  bgcolor: '#fafafa',
-                  '&::-webkit-scrollbar': { width: '4px' },
-                  '&::-webkit-scrollbar-thumb': { backgroundColor: '#ccc', borderRadius: '2px' }
+                  bgcolor: '#fff',
+                  width: '100%',
+                  pb: 1,
+                  boxSizing: 'border-box',
+                  '&::-webkit-scrollbar': {
+                    width: '8px', // 조금 더 두껍게
+                    display: 'block'
+                  },
+                  '&::-webkit-scrollbar-thumb': {
+                    backgroundColor: '#bbb', // 더 진한 색상으로 변경
+                    borderRadius: '4px',
+                    border: '2px solid #fff' // 여백을 주어 더 잘 보이게 함
+                  },
+                  '&::-webkit-scrollbar-track': {
+                    backgroundColor: '#f1f1f1',
+                    display: 'block' // 트랙도 강제 표시
+                  }
                 }}>
                   {sqlList.length === 0 ? (
                     <Typography variant="body2" color="text.secondary" align="center" sx={{ mt: 2, fontSize: '0.8rem' }}>
@@ -732,8 +751,7 @@ const InterfaceDialog = ({ open, data, rows = [], onClose, onSave }) => {
                         key={item.id}
                         onClick={() => handleSelectSql(item)}
                         sx={{
-                          px: 1,
-                          py: 0.2,
+                          px: 1, py: 0.5,
                           display: 'flex',
                           justifyContent: 'space-between',
                           alignItems: 'center',
@@ -741,7 +759,6 @@ const InterfaceDialog = ({ open, data, rows = [], onClose, onSave }) => {
                           borderBottom: '1px solid #f0f0f0',
                           bgcolor: editingId === item.id ? '#e3f2fd' : 'transparent',
                           borderLeft: editingId === item.id ? '4px solid #1976d2' : '4px solid transparent',
-                          minHeight: '28px',
                           '&:hover': { bgcolor: editingId === item.id ? '#e3f2fd' : '#f5f5f5' }
                         }}
                       >
@@ -749,7 +766,6 @@ const InterfaceDialog = ({ open, data, rows = [], onClose, onSave }) => {
                           fontSize: '0.75rem',
                           fontWeight: editingId === item.id ? 'bold' : 'normal',
                           color: editingId === item.id ? '#1976d2' : 'inherit',
-                          lineHeight: 1,
                           whiteSpace: 'nowrap',
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
@@ -759,21 +775,18 @@ const InterfaceDialog = ({ open, data, rows = [], onClose, onSave }) => {
                         </Typography>
                         <IconButton
                           size="small"
-                          sx={{
-                            color: editingId === item.id ? '#d32f2f' : 'error.main',
-                            p: 0.2
-                          }}
+                          sx={{ p: 0.2 }}
                           onClick={(e) => handleDeleteSql(e, item)}
                         >
-                          <DeleteIcon sx={{ fontSize: '1.1rem' }} />
+                          <DeleteIcon sx={{ fontSize: '1.1rem', color: 'error.main' }} />
                         </IconButton>
                       </Box>
                     ))
                   )}
                 </Box>
               </Box>
-            </Stack>
-          )}
+            </Box>
+          </Box>
         </Stack>
       </DialogContent>
 

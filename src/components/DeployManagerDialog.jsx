@@ -17,9 +17,11 @@ import {
     CheckCircle as CheckIcon,
     PauseCircle as PauseIcon,
     Cancel as CancelIcon,
-    WarningAmber as WarningIcon
+    WarningAmber as WarningIcon,
+    DoDisturbOn as UndeployIcon
 } from '@mui/icons-material';
 import { interfaceApi } from '../api/interfaceApi';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 
 const formatDeployVersion = (isoString) => {
     if (!isoString) return '';
@@ -63,6 +65,7 @@ const DeployManagerDialog = ({
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [filterVersion, setFilterVersion] = useState('ALL');
     const [filterTarget, setFilterTarget] = useState('ALL');
+    const [confirmMode, setConfirmMode] = useState('DEPLOY');
 
     // 인터페이스 미사용 여부 판단
     const isDisabledInterface = useYn === 'N';
@@ -110,7 +113,8 @@ const DeployManagerDialog = ({
                 version: row.deployVersion || '-',
                 user: row.deployedBy,
                 target: row.targetAdapter,
-                status: row.resultCode
+                status: row.resultCode,
+                result_msg: row.resultMsg
             })));
         } catch (err) { console.error("이력 로드 실패:", err); }
         finally { setLoading(false); }
@@ -148,6 +152,56 @@ const DeployManagerDialog = ({
         }
     };
 
+    // --- 배포 취소 실행 로직 (예시 함수) ---
+    const handleUndeploy = async () => {
+        setLoading(true);
+        try {
+            // 선택된 ID들을 순회하며 객체 생성
+            const adapterDetails = selectedAdapters.map(id => {
+                const adpt = adapters.find(a => a.pdName === id);
+                return {
+                    adapterId: id,
+                    // '1'인 경우만 true, 그 외(정지, 실패 등)는 false로 처리
+                    isOperational: String(adpt?.finalMoStatus) === '1'
+                };
+            });
+            const response = await interfaceApi.requestAsyncUndeploy({
+                interfaceId: interfaceId,
+                adapters: adapterDetails // [{ adapterId: "ADPT01", isOperational: true }, ...]
+            });
+            if (response.status === 200) {
+                alert(`${selectedAdapters.length}개의 어댑터에 배포 취소 요청을 완료했습니다.`);
+                loadInitialData();
+                setSelectedAdapters([]);
+            }
+        } catch (err) {
+            alert("배포 취소 중 오류가 발생했습니다.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const ResultStatus = ({ row }) => {
+        if (row.result_code !== 'F') return <Typography>{row.result_code}</Typography>;
+
+        return (
+            <Stack direction="row" alignItems="center" spacing={1}>
+                <Typography color="error" fontWeight="bold">실패</Typography>
+
+                {/* 마우스를 올리면 result_msg를 보여줌 */}
+                <Tooltip
+                    title={row.result_msg || "상세 에러 메시지가 없습니다."}
+                    arrow
+                    placement="top"
+                >
+                    <IconButton size="small" color="error">
+                        <ErrorOutlineIcon fontSize="small" />
+                    </IconButton>
+                </Tooltip>
+            </Stack>
+        );
+    };
+
     // --- 필터용 옵션 생성 ---
     const filterOptions = useMemo(() => {
         const versions = [...new Set(history.map(h => h.version))].filter(Boolean).sort((a, b) => b.localeCompare(a));
@@ -173,6 +227,23 @@ const DeployManagerDialog = ({
         });
     }, [history, filterVersion, filterTarget]);
 
+    const groupedData = useMemo(() => {
+        return adapters.reduce((acc, curr) => {
+            const name = curr.pjName || '미지정';
+            if (!acc[name]) acc[name] = [];
+            acc[name].push(curr);
+            return acc;
+        }, {});
+    }, [adapters]);
+
+    const displayAdapters = useMemo(() => {
+        if (selectedProject === 'DEPLOYED_ONLY') {
+            // 매핑된 상태라면 정지/운영 상관없이 모두 노출
+            return adapters.filter(a => a.isMapped === 'Y');
+        }
+        return groupedData[selectedProject] || [];
+    }, [selectedProject, adapters, groupedData]);
+
     // --- 5. UI Render Helpers ---
     const getStatusUI = useCallback((status) => {
         const s = String(status);
@@ -187,40 +258,40 @@ const DeployManagerDialog = ({
         return configs[s] || { icon: <CancelIcon sx={{ fontSize: 14 }} />, text: '중단', color: STATUS_COLORS.FAIL };
     }, []);
 
-    const groupedData = useMemo(() => {
-        return adapters.reduce((acc, curr) => {
-            const name = curr.pjName || '미지정';
-            if (!acc[name]) acc[name] = [];
-            acc[name].push(curr);
-            return acc;
-        }, {});
-    }, [adapters]);
-
     const renderAdapterCard = (adpt) => {
-        const isDisable = String(adpt.finalMoStatus) !== '1';
+        const isOperational = String(adpt.finalMoStatus) === '1';
+
+        // 수정: 현재 배포 어댑터 탭이라면 무조건 선택 가능, 그 외엔 운영 중일 때만 선택 가능
+        const canSelect = selectedProject === 'DEPLOYED_ONLY' || isOperational;
         const isSelected = selectedAdapters.includes(adpt.pdName);
         const ui = getStatusUI(adpt.finalMoStatus);
-        const isOutdated = adpt.lastDeployTime && lastModifiedTime
-            ? new Date(adpt.lastDeployTime) < new Date(lastModifiedTime) : false;
+        const currentInterfaceVersion = formatDeployVersion(lastModifiedTime);
+
+        // 2. 어댑터에 기록된 배포 버전(yyMMddHHmmss)과 직접 비교
+        // adpt.deployVersion이 이미 '261024052354' 형태라면 그대로 비교하면 됩니다.
+        const isOutdated = currentInterfaceVersion && adpt.deployVersion
+            ? currentInterfaceVersion !== adpt.deployVersion
+            : false;
 
         return (
             <Grid item xs={6} key={adpt.pdName}>
                 <Paper
                     variant="outlined"
-                    onClick={() => !isDisable && setSelectedAdapters(prev =>
+                    onClick={() => canSelect && setSelectedAdapters(prev =>
                         prev.includes(adpt.pdName) ? prev.filter(a => a !== adpt.pdName) : [...prev, adpt.pdName]
                     )}
                     sx={{
-                        p: 1.5, display: 'flex', alignItems: 'center', cursor: isDisable ? 'default' : 'pointer',
+                        p: 1.5, display: 'flex', alignItems: 'center',
+                        cursor: !canSelect ? 'default' : 'pointer',
                         borderColor: isSelected ? STATUS_COLORS.SUCCESS : isOutdated ? STATUS_COLORS.WARNING : '#cbd5e1',
                         bgcolor: isSelected ? '#f0f7ff' : 'white',
                         borderWidth: isSelected || isOutdated ? 2 : 1,
-                        opacity: isDisable ? 0.6 : 1,
-                        '&:hover': { borderColor: isDisable ? '#e2e8f0' : STATUS_COLORS.SUCCESS }
+                        // 운영 중이 아니더라도(정지 등) 선택 가능하므로 opacity 조절
+                        opacity: !canSelect ? 0.6 : 1,
+                        '&:hover': { borderColor: !canSelect ? '#e2e8f0' : STATUS_COLORS.SUCCESS }
                     }}
                 >
-                    <Checkbox size="small" checked={isSelected} disabled={isDisable} />
-                    <Box sx={{ ml: 1, overflow: 'hidden', flexGrow: 1 }}>
+                    <Checkbox size="small" checked={isSelected} disabled={!canSelect} />                    <Box sx={{ ml: 1, overflow: 'hidden', flexGrow: 1 }}>
                         <Stack direction="row" spacing={0.5} alignItems="center">
                             <Typography variant="caption" fontWeight="bold" noWrap>{adpt.pdAlias || adpt.pdName}</Typography>
                             {isOutdated && <Tooltip title="수정 후 미배포"><WarningIcon sx={{ color: STATUS_COLORS.WARNING, fontSize: 16 }} /></Tooltip>}
@@ -328,6 +399,8 @@ const DeployManagerDialog = ({
                                 const statusMap = {
                                     'S': { label: '배포 완료', color: STATUS_COLORS.SUCCESS },
                                     'P': { label: '배포 중', color: STATUS_COLORS.PENDING },
+                                    'U': { label: '배포취소 중', color: STATUS_COLORS.PENDING },
+                                    'C': { label: '배포취소 완료', color: STATUS_COLORS.SUCCESS },
                                     'F': { label: '배포 실패', color: STATUS_COLORS.FAIL }
                                 };
                                 const current = statusMap[row.status] || { label: '기타', color: '#64748b' };
@@ -346,7 +419,52 @@ const DeployManagerDialog = ({
                                             </Tooltip>
                                         </TableCell>
                                         <TableCell align="center">
-                                            <Chip label={current.label} size="small" variant="outlined" sx={{ fontSize: '0.65rem', color: current.color, borderColor: current.color, fontWeight: 'bold' }} />
+                                            <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="center">
+                                                {/* 🚀 실패(F)이고 메시지가 있을 때만 Tooltip을 활성화 */}
+                                                {row.status === 'F' && (row.result_msg || row.resultMsg) ? (
+                                                    <Tooltip
+                                                        title={
+                                                            <Box sx={{ p: 0.5 }}>
+                                                                <Typography variant="caption" sx={{ fontWeight: 'bold', display: 'block', mb: 0.5 }}>
+                                                                    [오류 메시지]
+                                                                </Typography>
+                                                                {row.result_msg || row.resultMsg}
+                                                            </Box>
+                                                        }
+                                                        arrow
+                                                        placement="top"
+                                                    >
+                                                        <Chip
+                                                            label={current.label}
+                                                            size="small"
+                                                            variant="outlined"
+                                                            sx={{
+                                                                fontSize: '0.65rem',
+                                                                color: current.color,
+                                                                borderColor: current.color,
+                                                                fontWeight: 'bold',
+                                                                cursor: 'help', // 🚀 도움말이 있다는 것을 암시하는 커서
+                                                                '&:hover': {
+                                                                    backgroundColor: `${current.color}10`, // 살짝 배경색 강조
+                                                                }
+                                                            }}
+                                                        />
+                                                    </Tooltip>
+                                                ) : (
+                                                    // 🚀 실패가 아니거나 메시지가 없으면 일반 Chip만 표시
+                                                    <Chip
+                                                        label={current.label}
+                                                        size="small"
+                                                        variant="outlined"
+                                                        sx={{
+                                                            fontSize: '0.65rem',
+                                                            color: current.color,
+                                                            borderColor: current.color,
+                                                            fontWeight: 'bold'
+                                                        }}
+                                                    />
+                                                )}
+                                            </Stack>
                                         </TableCell>
                                     </TableRow>
                                 );
@@ -373,7 +491,7 @@ const DeployManagerDialog = ({
                         <Stack direction="row" spacing={1.5} alignItems="center">
                             <RocketIcon sx={{ color: isDisabledInterface ? '#94a3b8' : '#38bdf8' }} />
                             <Typography variant="subtitle1" fontWeight="bold">
-                                배포 관리 - {interfaceName} {isDisabledInterface && "(미사용)"}
+                                배포 관리 - {interfaceId+"("+interfaceName+")"} {isDisabledInterface && "(미사용)"}
                             </Typography>
                         </Stack>
                         <IconButton size="small" onClick={tabValue === 0 ? loadInitialData : loadDeployHistory} sx={{ color: 'white' }}>
@@ -416,6 +534,7 @@ const DeployManagerDialog = ({
                                             <ListItemText primary="배포 추가" primaryTypographyProps={{ fontSize: '0.8rem', fontWeight: 'bold' }} />
                                             {isProjectListOpen ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
                                         </ListItemButton>
+
                                         <Collapse in={isProjectListOpen} timeout="auto" unmountOnExit>
                                             {Object.keys(groupedData).map(name => (
                                                 <ListItemButton key={name} selected={selectedProject === name} onClick={() => setSelectedProject(name)} sx={{ pl: 5 }}>
@@ -425,9 +544,9 @@ const DeployManagerDialog = ({
                                         </Collapse>
                                     </List>
                                 </Box>
-                                <Box sx={{ flexGrow: 1, p: 2, bgcolor: '#f1f5f9', overflowY: 'auto' }}>
+                                <Box sx={{ flexGrow: 1, p: 2, bgcolor: selectedProject === 'UNDEPLOY_LIST' ? '#fff5f5' : '#f1f5f9', overflowY: 'auto' }}>
                                     <Grid container spacing={2}>
-                                        {(selectedProject === 'DEPLOYED_ONLY' ? adapters.filter(a => !!a.lastDeployTime) : groupedData[selectedProject])?.map(adpt => renderAdapterCard(adpt))}
+                                        {displayAdapters.map(adpt => renderAdapterCard(adpt))}
                                     </Grid>
                                 </Box>
                             </Box>
@@ -437,41 +556,118 @@ const DeployManagerDialog = ({
 
                 <DialogActions sx={{ p: 2, borderTop: '1px solid #e2e8f0' }}>
                     {!isDisabledInterface && tabValue === 0 && (
-                        <Typography variant="caption" sx={{ flexGrow: 1, ml: 2 }}>선택됨: <b>{selectedAdapters.length}</b>개</Typography>
+                        <Typography variant="caption" sx={{ flexGrow: 1, ml: 2 }}>
+                            선택됨: <b>{selectedAdapters.length}</b>개
+                        </Typography>
                     )}
                     <Button onClick={onClose} color="inherit">닫기</Button>
                     {/* 탭이 0(어댑터 선택)이고 사용 중일 때만 버튼 표시 */}
                     {!isDisabledInterface && tabValue === 0 && (
-                        <Button variant="contained" color="primary" startIcon={<RocketIcon />} onClick={() => setConfirmOpen(true)} disabled={selectedAdapters.length === 0}>
-                            배포 실행
-                        </Button>
+                        <>
+                            {/* 1. 현재 배포 어댑터 탭에서만 '배포 취소' 버튼 노출 */}
+                            {selectedProject === 'DEPLOYED_ONLY' && (
+                                <Button
+                                    variant="outlined"
+                                    color="error"
+                                    startIcon={<UndeployIcon />}
+                                    onClick={() => {
+                                        setConfirmMode('UNDEPLOY');
+                                        setConfirmOpen(true);
+                                    }}
+                                    disabled={selectedAdapters.length === 0}
+                                    sx={{ ml: 1, fontWeight: 'bold' }}
+                                >
+                                    배포 취소
+                                </Button>
+                            )}
+
+                            {/* 2. 어떤 탭이든 '배포 실행' 버튼은 유지 (재배포 또는 신규 배포) */}
+                            <Button
+                                variant="contained"
+                                color="primary"
+                                startIcon={<RocketIcon />}
+                                onClick={() => {
+                                    setConfirmMode('DEPLOY');
+                                    setConfirmOpen(true);
+                                }}
+                                disabled={selectedAdapters.length === 0}
+                                sx={{ ml: 1, fontWeight: 'bold' }}
+                            >
+                                배포 실행
+                            </Button>
+                        </>
                     )}
                 </DialogActions>
             </Dialog>
 
             {/* 확인 다이얼로그 (기존 로직 유지) */}
             <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} PaperProps={{ sx: { borderRadius: 2, width: '450px' } }}>
-                <DialogTitle sx={{ bgcolor: '#f8fafc', py: 2 }}>
+                <DialogTitle sx={{ bgcolor: selectedProject === 'UNDEPLOY_LIST' ? '#fff1f2' : '#f8fafc', py: 2 }}>
                     <Stack direction="row" spacing={1} alignItems="center">
-                        <RocketIcon color="primary" />
-                        <Typography variant="h6" fontWeight="bold">배포 실행 확인</Typography>
+                        {selectedProject === 'UNDEPLOY_LIST' ? (
+                            <UndeployIcon color="error" />
+                        ) : (
+                            <RocketIcon color="primary" />
+                        )}
+                        <Typography variant="h6" fontWeight="bold">
+                            {selectedProject === 'UNDEPLOY_LIST' ? '배포 취소 확인' : '배포 실행 확인'}
+                        </Typography>
                     </Stack>
                 </DialogTitle>
                 <DialogContent sx={{ mt: 2 }}>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                        선택하신 <b>{selectedAdapters.length}개</b>의 어댑터에 배포 명령을 전송하시겠습니까?
+                        선택하신 <b>{selectedAdapters.length}개</b>의 어댑터에 대해
+                        {selectedProject === 'UNDEPLOY_LIST' ? (
+                            <Box component="span" sx={{ color: 'error.main', fontWeight: 'bold' }}> 배포 취소(매핑 해제) </Box>
+                        ) : (
+                            <Box component="span" sx={{ color: 'primary.main', fontWeight: 'bold' }}> 배포 명령 </Box>
+                        )}
+                        을 전송하시겠습니까?
                     </Typography>
-                    <Box sx={{ p: 1.5, bgcolor: '#f1f5f9', borderRadius: 1.5, border: '1px solid #e2e8f0', maxHeight: '150px', overflowY: 'auto' }}>
+
+                    <Box sx={{
+                        p: 1.5,
+                        bgcolor: selectedProject === 'UNDEPLOY_LIST' ? '#fff5f5' : '#f1f5f9',
+                        borderRadius: 1.5,
+                        border: '1px solid',
+                        borderColor: selectedProject === 'UNDEPLOY_LIST' ? '#fecaca' : '#e2e8f0',
+                        maxHeight: '150px',
+                        overflowY: 'auto'
+                    }}>
                         <Stack direction="row" spacing={0.8} useFlexGap flexWrap="wrap">
                             {selectedAdapters.map((id) => (
-                                <Chip key={id} label={adapters.find(a => a.pdName === id)?.pdAlias || id} size="small" sx={{ bgcolor: 'white', fontSize: '0.7rem' }} />
+                                <Chip
+                                    key={id}
+                                    label={adapters.find(a => a.pdName === id)?.pdAlias || id}
+                                    size="small"
+                                    sx={{ bgcolor: 'white', fontSize: '0.7rem' }}
+                                />
                             ))}
                         </Stack>
                     </Box>
                 </DialogContent>
-                <DialogActions sx={{ p: 2.5, bgcolor: '#f8fafc' }}>
+                <DialogActions sx={{ p: 2.5, bgcolor: confirmMode === 'UNDEPLOY' ? '#fff1f2' : '#f8fafc' }}>
                     <Button onClick={() => setConfirmOpen(false)} color="inherit">취소</Button>
-                    <Button onClick={handleFinalDeploy} variant="contained" color="primary" sx={{ fontWeight: 'bold' }}>지금 배포 실행</Button>
+
+                    {/* 바로 이 버튼의 onClick과 색상을 수정합니다! */}
+                    <Button
+                        variant="contained"
+                        // 1. 모드에 따라 색상 변경 (빨강 vs 파랑)
+                        color={confirmMode === 'UNDEPLOY' ? "error" : "primary"}
+                        // 2. 모드에 따라 실행할 함수 연결
+                        onClick={() => {
+                            if (confirmMode === 'UNDEPLOY') {
+                                handleUndeploy(); // 배포 취소 함수 실행
+                            } else {
+                                handleFinalDeploy(); // 배포 실행 함수 실행
+                            }
+                            setConfirmOpen(false); // 창 닫기
+                        }}
+                        sx={{ fontWeight: 'bold' }}
+                    >
+                        {/* 3. 모드에 따라 버튼 글자 변경 */}
+                        {confirmMode === 'UNDEPLOY' ? '지금 배포 취소' : '지금 배포 실행'}
+                    </Button>
                 </DialogActions>
             </Dialog>
         </>

@@ -33,9 +33,9 @@ const InterfaceGrid = ({ rows = [], onRowClick, onDeployManage, loading }) => {
   const [filterUseYn, setFilterUseYn] = useState('ALL');
   const [filterPattern, setFilterPattern] = useState('ALL');
 
-  const patternOptions = useMemo(() => 
+  const patternOptions = useMemo(() =>
     [...new Set(rows.map(r => r.patternName).filter(Boolean))].sort()
-  , [rows]);
+    , [rows]);
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
@@ -49,9 +49,9 @@ const InterfaceGrid = ({ rows = [], onRowClick, onDeployManage, loading }) => {
   }, [rows, searchText, filterUseYn, filterPattern]);
 
   const columns = useMemo(() => [
-    { 
-      field: 'no', headerName: '#', width: 50, align: 'center', headerAlign: 'center', 
-      renderCell: (p) => p.api.getRowIndexRelativeToVisibleRows(p.id) + 1 
+    {
+      field: 'no', headerName: '#', width: 50, align: 'center', headerAlign: 'center',
+      renderCell: (p) => p.api.getRowIndexRelativeToVisibleRows(p.id) + 1
     },
     {
       field: 'interfaceId',
@@ -90,15 +90,15 @@ const InterfaceGrid = ({ rows = [], onRowClick, onDeployManage, loading }) => {
       headerAlign: 'center',
       renderCell: (params) => {
         const { deployStatus, lastDeployAt, updatedAt, deploySuccessCount, deployTotalCount } = params.row;
-        
+
         const lastDeployTime = lastDeployAt ? new Date(lastDeployAt).getTime() : 0;
-  const lastUpdateTime = updatedAt ? new Date(updatedAt).getTime() : 0;
+        const lastUpdateTime = updatedAt ? new Date(updatedAt).getTime() : 0;
 
         // 🚀 상태 판별 로직
         let chipConfig = {
           label: "배포 완료",
           color: "success",
-          icon: <CheckCircleIcon style={{fontSize: 16}}/>,
+          icon: <CheckCircleIcon style={{ fontSize: 16 }} />,
           tooltip: "운영 서버와 설정이 일치합니다."
         };
 
@@ -107,23 +107,23 @@ const InterfaceGrid = ({ rows = [], onRowClick, onDeployManage, loading }) => {
           chipConfig = {
             label: "미배포",
             color: "default",
-            icon: <CloudOffIcon style={{fontSize: 16}}/>,
+            icon: <CloudOffIcon style={{ fontSize: 16 }} />,
             tooltip: "한 번도 배포되지 않았습니다."
           };
         } else if (deployStatus === 'P') {
-    chipConfig = {
-      // 예: "부분 성공 (2/3)" 처럼 표시
-      label: "배포 중",
-      color: "info", // 하늘색 계열
-      icon: <ErrorOutlineIcon style={{fontSize: 16, color: '#fff'}}/>,
-      tooltip: "일부 어댑터 배포에 실패했거나 진행 중입니다. 확인이 필요합니다."
-    };
-  }else if (deployStatus === 'N' || lastUpdateTime > lastDeployTime) {
+          chipConfig = {
+            // 예: "부분 성공 (2/3)" 처럼 표시
+            label: "배포 중",
+            color: "info", // 하늘색 계열
+            icon: <ErrorOutlineIcon style={{ fontSize: 16, color: '#fff' }} />,
+            tooltip: "일부 어댑터 배포에 실패했거나 진행 중입니다. 확인이 필요합니다."
+          };
+        } else if (deployStatus === 'N' || lastUpdateTime > lastDeployTime) {
           // 2. 배포 이력은 있으나 수정되어 재배포가 필요한 경우
           chipConfig = {
             label: "배포 필요",
             color: "warning",
-            icon: <ErrorOutlineIcon style={{fontSize: 16}}/>,
+            icon: <ErrorOutlineIcon style={{ fontSize: 16 }} />,
             tooltip: "설정이 변경되었습니다. 재배포가 필요합니다."
           };
         }
@@ -141,7 +141,7 @@ const InterfaceGrid = ({ rows = [], onRowClick, onDeployManage, loading }) => {
               size="small"
               onClick={handleDeployClick}
               icon={chipConfig.icon}
-              sx={{ 
+              sx={{
                 fontWeight: 'bold', width: 100, cursor: 'pointer',
                 '&:hover': { boxShadow: 2, transform: 'scale(1.05)' },
                 transition: 'all 0.1s'
@@ -182,10 +182,10 @@ const InterfaceGrid = ({ rows = [], onRowClick, onDeployManage, loading }) => {
             InputProps={{
               startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" sx={{ color: '#b0bec5' }} /></InputAdornment>
             }}
-            sx={{ 
-                input: { color: 'white' }, 
-                '& .MuiOutlinedInput-notchedOutline': { borderColor: '#edebf5' },
-                '& .MuiInputBase-input::placeholder': { color: '#cfd8dc', opacity: 1 }
+            sx={{
+              input: { color: 'white' },
+              '& .MuiOutlinedInput-notchedOutline': { borderColor: '#edebf5' },
+              '& .MuiInputBase-input::placeholder': { color: '#cfd8dc', opacity: 1 }
             }}
           />
         </Stack>
@@ -212,8 +212,8 @@ const FilterSelect = ({ label, value, onChange, options }) => (
     <Select
       value={value} label={label}
       onChange={(e) => onChange(e.target.value)}
-      sx={{ 
-        color: 'white', 
+      sx={{
+        color: 'white',
         '.MuiOutlinedInput-notchedOutline': { borderColor: '#edebf5' },
         '.MuiSvgIcon-root': { color: 'white' }
       }}
