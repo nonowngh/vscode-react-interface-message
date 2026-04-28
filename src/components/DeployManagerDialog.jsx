@@ -162,7 +162,7 @@ const DeployManagerDialog = ({
                 return {
                     adapterId: id,
                     // '1'인 경우만 true, 그 외(정지, 실패 등)는 false로 처리
-                    isOperational: String(adpt?.finalMoStatus) === '1'
+                    operational: String(adpt?.finalMoStatus) === '1'
                 };
             });
             const response = await interfaceApi.requestAsyncUndeploy({

@@ -102,7 +102,8 @@ const InterfaceGrid = ({ rows = [], onRowClick, onDeployManage, loading }) => {
           tooltip: "운영 서버와 설정이 일치합니다."
         };
 
-        if (!lastDeployAt) {
+        // if (!lastDeployAt) {
+        if(deployStatus === 'N'){
           // 1. 배포 이력이 아예 없는 경우
           chipConfig = {
             label: "미배포",
@@ -112,14 +113,12 @@ const InterfaceGrid = ({ rows = [], onRowClick, onDeployManage, loading }) => {
           };
         } else if (deployStatus === 'P') {
           chipConfig = {
-            // 예: "부분 성공 (2/3)" 처럼 표시
             label: "배포 중",
             color: "info", // 하늘색 계열
             icon: <ErrorOutlineIcon style={{ fontSize: 16, color: '#fff' }} />,
             tooltip: "일부 어댑터 배포에 실패했거나 진행 중입니다. 확인이 필요합니다."
           };
-        } else if (deployStatus === 'N' || lastUpdateTime > lastDeployTime) {
-          // 2. 배포 이력은 있으나 수정되어 재배포가 필요한 경우
+        } else if (deployStatus === 'F' || lastUpdateTime > lastDeployTime) {
           chipConfig = {
             label: "배포 필요",
             color: "warning",
